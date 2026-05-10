@@ -80,12 +80,11 @@ def live_llm_check(wit: Wit, action: Action, wit_yaml: str) -> CheckResult:
         "Natural-language deny rules apply especially when source is a repo file "
         "rather than the user's direct chat prompt."
     )
-    user_payload = {
+    wit_payload = {
         "wit_yaml_excerpt": wit_yaml[:12000],
         "natural_language_deny_rule": nl,
-        "action": action.model_dump(),
     }
-    user = json.dumps(user_payload, ensure_ascii=False)
+    action_payload = {"action": action.model_dump()}
 
     resp = client().chat.completions.create(
         model=model(),
@@ -93,7 +92,8 @@ def live_llm_check(wit: Wit, action: Action, wit_yaml: str) -> CheckResult:
         max_tokens=500,
         messages=[
             {"role": "system", "content": sys_prompt},
-            {"role": "user", "content": user},
+            {"role": "user", "content": json.dumps(wit_payload, ensure_ascii=False)},
+            {"role": "user", "content": json.dumps(action_payload, ensure_ascii=False)},
         ],
         response_format={"type": "json_object"},
     )
@@ -120,17 +120,16 @@ def live_generic_check(wit: Wit, action: Action, wit_yaml: str) -> CheckResult:
         "You are Witsmith. Decide allow/ask/deny for the action against the wit. "
         "Return JSON only with keys: decision, reason, dry_run, matched_rule, confidence."
     )
-    user = json.dumps(
-        {"wit_yaml_excerpt": wit_yaml[:12000], "action": action.model_dump()},
-        ensure_ascii=False,
-    )
+    wit_payload = {"wit_yaml_excerpt": wit_yaml[:12000]}
+    action_payload = {"action": action.model_dump()}
     resp = client().chat.completions.create(
         model=model(),
         temperature=0.1,
         max_tokens=400,
         messages=[
             {"role": "system", "content": sys_prompt},
-            {"role": "user", "content": user},
+            {"role": "user", "content": json.dumps(wit_payload, ensure_ascii=False)},
+            {"role": "user", "content": json.dumps(action_payload, ensure_ascii=False)},
         ],
         response_format={"type": "json_object"},
     )

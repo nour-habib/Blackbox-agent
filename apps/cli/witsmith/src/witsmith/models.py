@@ -45,6 +45,7 @@ Decision = Literal["allow", "ask", "deny"]
 class Action(BaseModel):
     command: str
     cwd: str
+    session_id: Optional[str] = None
     diff: Optional[str] = None
     source: Optional[str] = None  # "user", "RECENT_NOTES.md", etc.
 

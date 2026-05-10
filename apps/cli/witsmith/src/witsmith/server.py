@@ -7,15 +7,15 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-from witsmith.amend_service import propose_amendment_diff
+from witsmith.amend_service import propose_contract_amendment
 from witsmith.analyze_service import analyze_log_event
 from witsmith.check_service import run_wit_check
 from witsmith.config import witsmith_data_dirname
+from witsmith.contracts import to_contract_decision, to_contract_event
 from witsmith.layout import find_wit_file, repo_root_for_wit
 from witsmith.models import Action
-from witsmith.replay import read_event_by_action_id
+from witsmith.replay import append_event, new_action_id, read_event_by_action_id, utc_now_iso
 from witsmith.scaffold_docs import ensure_hackathon_docs
-from witsmith.wit_file import wit_yaml_text
 
 mcp = FastMCP("witsmith")
 
@@ -56,13 +56,36 @@ def wit_check(
     cwd: str,
     diff: str | None = None,
     source: str | None = None,
+    session_id: str | None = None,
     repo_path: str = ".",
 ) -> dict[str, Any]:
     """Decide allow / ask / deny for a proposed action."""
     wit_path = _wit_path(repo_path)
-    action = Action(command=command, cwd=cwd, diff=diff, source=source)
+    repo_root = repo_root_for_wit(wit_path)
+    dirname = witsmith_data_dirname()
+    action = Action(command=command, cwd=cwd, session_id=session_id, diff=diff, source=source)
     result, meta = run_wit_check(action, wit_path)
-    return {**result.model_dump(mode="json"), "meta": meta}
+    log_line = {
+        "action_id": new_action_id(),
+        "ts": utc_now_iso(),
+        "command": command,
+        "cwd": cwd,
+        "source": source,
+        "session_id": session_id,
+        "decision": result.decision,
+        "reason": result.reason,
+        "matched_rule": result.matched_rule,
+        "confidence": result.confidence,
+        "cache_hit": meta.get("cache_hit", False),
+        "executed": False,
+        "exit_code": None,
+        "stdout": "",
+        "stderr": "",
+    }
+    append_event(repo_root, dirname, log_line)
+    decision = to_contract_decision(result, action).model_dump(mode="json")
+    event = to_contract_event(log_line).model_dump(mode="json")
+    return {**decision, "_witsmith": {"meta": meta, "event": event}}
 
 
 @mcp.tool()
@@ -85,17 +108,38 @@ def analyze_failure(
 
 
 @mcp.tool()
-def propose_amendment(failure_id: str, repo_path: str = ".") -> dict[str, Any]:
-    """Return a YAML unified-diff style amendment proposal for the wit."""
+def propose_amendment(
+    failure_id: str,
+    repo_path: str = ".",
+    session_id: str | None = None,
+    evidence: list[str] | None = None,
+) -> dict[str, Any]:
+    """Return a team-facing ContractAmendment proposal for the wit."""
     wit_path = _wit_path(repo_path)
     repo_root = repo_root_for_wit(wit_path)
     dirname = witsmith_data_dirname()
     event = read_event_by_action_id(repo_root, dirname, failure_id)
     if event is None:
         return {"error": "failure_id not found in replay log", "failure_id": failure_id}
-    yml = wit_yaml_text(wit_path)
-    diff = propose_amendment_diff(yml, event)
-    return {"failure_id": failure_id, "unified_diff": diff}
+    amendment = propose_contract_amendment(
+        wit_path,
+        event,
+        evidence=evidence,
+        session_id=session_id,
+    )
+    return amendment.model_dump(mode="json")
+
+
+@mcp.tool()
+def wit_event(action_id: str, repo_path: str = ".") -> dict[str, Any]:
+    """Return a replay log line as the shared ContractEvent shape."""
+    wit_path = _wit_path(repo_path)
+    repo_root = repo_root_for_wit(wit_path)
+    dirname = witsmith_data_dirname()
+    event = read_event_by_action_id(repo_root, dirname, action_id)
+    if event is None:
+        return {"error": "action_id not found in replay log", "action_id": action_id}
+    return to_contract_event(event).model_dump(mode="json")
 
 
 def run() -> None:
