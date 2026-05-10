@@ -28,6 +28,15 @@ def _apply_confidence_floor(result: CheckResult) -> CheckResult:
     return result
 
 
+def _meta_for_result(result: CheckResult, base: dict) -> dict:
+    meta = dict(base)
+    if result.model_name:
+        meta["model"] = result.model_name
+    if result.escalated_from:
+        meta["escalated_from"] = result.escalated_from
+    return meta
+
+
 def run_wit_check(
     action: Action,
     wit_path: Path,
@@ -46,7 +55,7 @@ def run_wit_check(
     if use_cache:
         cached = cache_get(db_path, key)
         if cached is not None:
-            return cached, {"cache_hit": True, "cache_key": key}
+            return cached, _meta_for_result(cached, {"cache_hit": True, "cache_key": key})
 
     # 1) NL-first for repo-file-originated risky commands (demo injection beat)
     if should_run_nl_deny_check(wit, action):
@@ -54,7 +63,9 @@ def run_wit_check(
         if nl is not None:
             out = _apply_confidence_floor(nl)
             cache_put(db_path, key, out)
-            return out, {"cache_hit": False, "cache_key": key, "path": "nl"}
+            return out, _meta_for_result(
+                out, {"cache_hit": False, "cache_key": key, "path": "nl"}
+            )
 
     # 2) Structured allow / ask / deny
     structured = apply_structured_rules(wit, action, repo_root)
@@ -67,4 +78,6 @@ def run_wit_check(
     generic = generic_fallback_check(wit, action, wit_yaml)
     out = _apply_confidence_floor(generic)
     cache_put(db_path, key, out)
-    return out, {"cache_hit": False, "cache_key": key, "path": "generic"}
+    return out, _meta_for_result(
+        out, {"cache_hit": False, "cache_key": key, "path": "generic"}
+    )

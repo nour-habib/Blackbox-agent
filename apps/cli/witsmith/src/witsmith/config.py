@@ -26,3 +26,19 @@ def mock_llm_enabled() -> bool:
 def confidence_ask_threshold() -> float:
     _load_env_once()
     return float(os.environ.get("WITSMITH_CONFIDENCE_ASK_BELOW", "0.7"))
+
+
+def model_escalation_enabled() -> bool:
+    """Escalate uncertain non-deny model checks to the strong model by default."""
+    _load_env_once()
+    return os.environ.get("WITSMITH_MODEL_ESCALATION", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+
+
+def model_escalation_threshold() -> float:
+    _load_env_once()
+    return float(os.environ.get("WITSMITH_MODEL_ESCALATE_BELOW", "0.75"))

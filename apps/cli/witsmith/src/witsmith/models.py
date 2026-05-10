@@ -56,6 +56,8 @@ class CheckResult(BaseModel):
     dry_run: Optional[str] = None
     matched_rule: Optional[str] = None
     confidence: float = 0.0
+    model_name: Optional[str] = None
+    escalated_from: Optional[str] = None
 
 
 class FailureAnalysis(BaseModel):

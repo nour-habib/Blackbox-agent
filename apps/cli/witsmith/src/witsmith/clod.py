@@ -25,6 +25,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 DEFAULT_MODEL = "gpt-oss-120b"  # free-tier; swap via WITSMITH_MODEL in .env
+DEFAULT_STRONG_MODEL = "claude-sonnet-4-5"
 DEFAULT_BASE_URL = "https://api.clod.io/v1"
 
 
@@ -72,3 +73,21 @@ def model() -> str:
     """The default model name used by every Witsmith LLM call."""
     _load_env_once()
     return os.environ.get("WITSMITH_MODEL", DEFAULT_MODEL)
+
+
+def check_model() -> str:
+    """Cheap/default model for first-pass permission checks."""
+    _load_env_once()
+    return os.environ.get("WITSMITH_CHECK_MODEL") or model()
+
+
+def strong_model() -> str:
+    """Escalation model for uncertain high-risk checks."""
+    _load_env_once()
+    return os.environ.get("WITSMITH_STRONG_MODEL", DEFAULT_STRONG_MODEL)
+
+
+def amend_model() -> str:
+    """Policy-changing amendment model; defaults to the strong model."""
+    _load_env_once()
+    return os.environ.get("WITSMITH_AMEND_MODEL") or strong_model()

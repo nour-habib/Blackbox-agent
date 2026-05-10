@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-from witsmith.clod import client, model
+from witsmith.clod import amend_model, client
 from witsmith.config import mock_llm_enabled
 from witsmith.contracts import ContractAmendment, EvidenceBundle, to_contract_amendment
 from witsmith.evidence import bundle_evidence
@@ -32,6 +32,7 @@ def mock_amendment_diff(wit_yaml: str, log_event: dict[str, Any]) -> str:
 
 
 def live_amendment_diff(wit_yaml: str, log_event: dict[str, Any]) -> str:
+    selected_model = amend_model()
     system_prompt = (
         "You amend AGENT_WIT.yaml after a security deny. Return JSON only with key "
         "`unified_diff` whose value is a Git-style unified diff patch for the wit file "
@@ -40,7 +41,7 @@ def live_amendment_diff(wit_yaml: str, log_event: dict[str, Any]) -> str:
     wit_payload = json.dumps({"wit_yaml": wit_yaml[:16000]}, ensure_ascii=False)
     event_payload = json.dumps({"log_event": log_event}, ensure_ascii=False)
     resp = client().chat.completions.create(
-        model=model(),
+        model=selected_model,
         temperature=0.1,
         max_tokens=900,
         messages=[

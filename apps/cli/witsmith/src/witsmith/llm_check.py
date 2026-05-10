@@ -6,8 +6,12 @@ import json
 import re
 from typing import Any
 
-from witsmith.clod import client, model
-from witsmith.config import mock_llm_enabled
+from witsmith.clod import check_model, client, strong_model
+from witsmith.config import (
+    mock_llm_enabled,
+    model_escalation_enabled,
+    model_escalation_threshold,
+)
 from witsmith.models import Action, CheckResult, Wit
 from witsmith.rule_engine import should_run_nl_deny_check
 
@@ -68,9 +72,35 @@ def _extract_json_object(text: str) -> dict[str, Any]:
     return json.loads(text)
 
 
-def live_llm_check(wit: Wit, action: Action, wit_yaml: str) -> CheckResult:
+def _tag_model(
+    result: CheckResult,
+    model_name: str,
+    *,
+    escalated_from: str | None = None,
+) -> CheckResult:
+    return result.model_copy(
+        update={"model_name": model_name, "escalated_from": escalated_from}
+    )
+
+
+def _should_escalate(result: CheckResult) -> bool:
+    if not model_escalation_enabled():
+        return False
+    if result.decision == "deny":
+        return False
+    return result.confidence < model_escalation_threshold()
+
+
+def live_llm_check(
+    wit: Wit,
+    action: Action,
+    wit_yaml: str,
+    *,
+    model_name: str | None = None,
+) -> CheckResult:
     """Single chat.completions call; expects JSON in the reply."""
     nl = _first_nl_deny_rule_text(wit) or ""
+    selected_model = model_name or check_model()
     sys_prompt = (
         "You are Witsmith's permission engine. Given an AGENT_WIT.yaml contract "
         "and a proposed shell action, respond with a single JSON object only "
@@ -87,7 +117,7 @@ def live_llm_check(wit: Wit, action: Action, wit_yaml: str) -> CheckResult:
     action_payload = {"action": action.model_dump()}
 
     resp = client().chat.completions.create(
-        model=model(),
+        model=selected_model,
         temperature=0.1,
         max_tokens=500,
         messages=[
@@ -99,7 +129,7 @@ def live_llm_check(wit: Wit, action: Action, wit_yaml: str) -> CheckResult:
     )
     raw = (resp.choices[0].message.content or "").strip()
     data = _extract_json_object(raw)
-    return _parse_check_json(data)
+    return _tag_model(_parse_check_json(data), selected_model)
 
 
 def nl_deny_check(wit: Wit, action: Action, wit_yaml: str) -> CheckResult | None:
@@ -109,13 +139,40 @@ def nl_deny_check(wit: Wit, action: Action, wit_yaml: str) -> CheckResult | None
     if mock_llm_enabled():
         return mock_nl_deny_check(wit, action)
     try:
-        return live_llm_check(wit, action, wit_yaml)
+        first_model = check_model()
+        first = live_llm_check(wit, action, wit_yaml, model_name=first_model)
+        if not _should_escalate(first):
+            return first
+
+        second_model = strong_model()
+        if second_model == first_model:
+            return first
+
+        try:
+            second = live_llm_check(wit, action, wit_yaml, model_name=second_model)
+        except Exception:
+            return first
+
+        return second.model_copy(
+            update={
+                "reason": f"{second.reason} (escalated from {first_model} to {second_model})",
+                "model_name": second_model,
+                "escalated_from": first_model,
+            }
+        )
     except Exception:
         # Demo resilience: fall back to mock semantics if CLōD is down.
         return mock_nl_deny_check(wit, action)
 
 
-def live_generic_check(wit: Wit, action: Action, wit_yaml: str) -> CheckResult:
+def live_generic_check(
+    wit: Wit,
+    action: Action,
+    wit_yaml: str,
+    *,
+    model_name: str | None = None,
+) -> CheckResult:
+    selected_model = model_name or check_model()
     sys_prompt = (
         "You are Witsmith. Decide allow/ask/deny for the action against the wit. "
         "Return JSON only with keys: decision, reason, dry_run, matched_rule, confidence."
@@ -123,7 +180,7 @@ def live_generic_check(wit: Wit, action: Action, wit_yaml: str) -> CheckResult:
     wit_payload = {"wit_yaml_excerpt": wit_yaml[:12000]}
     action_payload = {"action": action.model_dump()}
     resp = client().chat.completions.create(
-        model=model(),
+        model=selected_model,
         temperature=0.1,
         max_tokens=400,
         messages=[
@@ -134,7 +191,7 @@ def live_generic_check(wit: Wit, action: Action, wit_yaml: str) -> CheckResult:
         response_format={"type": "json_object"},
     )
     raw = (resp.choices[0].message.content or "").strip()
-    return _parse_check_json(_extract_json_object(raw))
+    return _tag_model(_parse_check_json(_extract_json_object(raw)), selected_model)
 
 
 def generic_fallback_check(wit: Wit, action: Action, wit_yaml: str) -> CheckResult:
@@ -148,7 +205,7 @@ def generic_fallback_check(wit: Wit, action: Action, wit_yaml: str) -> CheckResu
             confidence=0.55,
         )
     try:
-        return live_generic_check(wit, action, wit_yaml)
+        return live_generic_check(wit, action, wit_yaml, model_name=check_model())
     except Exception:
         return CheckResult(
             decision="ask",
