@@ -80,6 +80,27 @@ def read_events_from_offset(repo_root: Path, dirname: str, offset: int = 0) -> l
     return events
 
 
+def iter_events_for_session(
+    repo_root: Path, dirname: str, session_id: str
+) -> list[dict[str, Any]]:
+    path = log_path(repo_root, dirname)
+    if not path.is_file():
+        return []
+    events: list[dict[str, Any]] = []
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if obj.get("session_id") == session_id or obj.get("sessionId") == session_id:
+                events.append(obj)
+    return events
+
+
 def read_last_deny(repo_root: Path, dirname: str) -> dict[str, Any] | None:
     path = log_path(repo_root, dirname)
     if not path.is_file():
