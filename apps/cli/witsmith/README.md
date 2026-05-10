@@ -27,6 +27,7 @@ witsmith run "command"
 witsmith finish
 witsmith context "next task"
 witsmith stale-check
+witsmith clean
 witsmith scaffold
 witsmith amend --last
 witsmith rescue --last
@@ -77,6 +78,47 @@ uv run witsmith stale-check --cwd demo-repo
 
 Use `--no-exec` when testing if you only want Witsmith's decision/logging
 behavior and do not want the command to actually run.
+
+## Cleanup
+
+`witsmith clean` removes Witsmith-generated runtime artifacts. It is a dry run by
+default:
+
+```bash
+uv run witsmith clean --cwd demo-repo
+```
+
+To actually delete the default runtime files:
+
+```bash
+uv run witsmith clean --cwd demo-repo --yes
+```
+
+Default cleanup targets:
+
+```text
+.witsmith/active-session.json
+.witsmith/agent-trace.md
+.witsmith/context.md
+.witsmith/log.jsonl
+.witsmith/cache.sqlite
+.witsmith/cache.sqlite-journal
+```
+
+To also delete finished session JSON files:
+
+```bash
+uv run witsmith clean --cwd demo-repo --yes --sessions
+```
+
+To remove the full runtime directory and Witsmith Cursor rule:
+
+```bash
+uv run witsmith clean --cwd demo-repo --yes --all
+```
+
+`clean` does not remove `AGENT_WIT.yaml`, Prisma migrations, source files, or
+`.env`.
 
 ## Runtime Files
 

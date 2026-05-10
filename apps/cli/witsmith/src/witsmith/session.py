@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -269,6 +270,75 @@ def cmd_stale_check(cwd: str) -> int:
         "Hash-based stale detection will be added later."
     )
     return 0
+
+
+def cmd_clean(cwd: str, *, yes: bool = False, sessions: bool = False, clean_all: bool = False) -> int:
+    try:
+        repo_root = resolve_repo_root(cwd, require_existing=True)
+    except RuntimeError as e:
+        print(str(e))
+        return 3
+
+    targets = _clean_targets(repo_root, sessions=sessions, clean_all=clean_all)
+    existing = [path for path in targets if path.exists()]
+    if not existing:
+        print("witsmith clean: nothing to clean")
+        return 0
+
+    active_path = data_dir(repo_root) / "active-session.json"
+    if active_path.exists() and any(active_path == path or active_path.is_relative_to(path) for path in existing):
+        print("witsmith clean: warning: active session state will be removed")
+
+    action = "removing" if yes else "would remove"
+    for path in existing:
+        print(f"witsmith clean: {action} {_rel(path, repo_root)}")
+
+    if not yes:
+        print("witsmith clean: dry run only; pass --yes to delete")
+        return 0
+
+    for path in existing:
+        if not _is_under(path, repo_root):
+            print(f"witsmith clean: refusing to remove path outside repo root: {path}")
+            return 5
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+    return 0
+
+
+def _clean_targets(repo_root: Path, *, sessions: bool, clean_all: bool) -> list[Path]:
+    wdir = data_dir(repo_root)
+    if clean_all:
+        return [wdir, repo_root / ".cursor" / "rules" / "witsmith-memory.mdc"]
+
+    targets = [
+        wdir / "active-session.json",
+        wdir / "agent-trace.md",
+        wdir / "context.md",
+        wdir / "log.jsonl",
+        wdir / "cache.sqlite",
+        wdir / "cache.sqlite-journal",
+    ]
+    if sessions:
+        targets.append(wdir / "sessions")
+    return targets
+
+
+def _is_under(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def _rel(path: Path, root: Path) -> str:
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
 
 
 def _trace_template(session_id: str, task: str) -> str:

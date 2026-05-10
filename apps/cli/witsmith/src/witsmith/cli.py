@@ -21,6 +21,7 @@ from witsmith.models import Action, CheckResult
 from witsmith.replay import append_event, new_action_id, read_last_deny, utc_now_iso
 from witsmith.scaffold_docs import ensure_hackathon_docs
 from witsmith.session import (
+    cmd_clean,
     cmd_context,
     cmd_finish,
     cmd_init,
@@ -275,6 +276,17 @@ def build_parser() -> argparse.ArgumentParser:
     pscq = sub.add_parser("stale-check", help="Count memory cards; hash stale-check comes later")
     pscq.add_argument("--cwd", default=".", help="Repo/project root to read sessions from")
 
+    pcl = sub.add_parser("clean", help="Remove Witsmith runtime artifacts")
+    pcl.add_argument("--cwd", default=".", help="Repo/project root to clean")
+    pcl.add_argument("--yes", action="store_true", help="Actually delete files; default is dry-run")
+    pcl.add_argument("--sessions", action="store_true", help="Also remove .witsmith/sessions")
+    pcl.add_argument(
+        "--all",
+        dest="clean_all",
+        action="store_true",
+        help="Remove the full .witsmith directory and Witsmith Cursor rule",
+    )
+
     pr = sub.add_parser("run", help="wit_check → optional execute")
     pr.add_argument(
         "shell_cmd",
@@ -360,6 +372,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_context(ns.task, ns.cwd)
     if ns.cmd == "stale-check":
         return cmd_stale_check(ns.cwd)
+    if ns.cmd == "clean":
+        return cmd_clean(ns.cwd, yes=ns.yes, sessions=ns.sessions, clean_all=ns.clean_all)
     if ns.cmd == "run":
         return cmd_run(ns)
     if ns.cmd == "amend":
