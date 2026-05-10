@@ -13,14 +13,15 @@ export function buildObservedClaims(bundle: EvidenceBundle): Claim[] {
     });
   }
 
-  const failedCommands = bundle.commands.filter((c) => c.exitCode !== 0);
-  for (const cmd of failedCommands) {
+  const failedActions = bundle.actions.filter((a) => a.executed && (a.exit_code ?? 0) !== 0);
+  for (const action of failedActions) {
+    const output = action.stdout ?? action.stderr ?? "";
     claims.push({
-      id: `claim_observed_${Date.now()}_${cmd.command.replace(/\s/g, "_")}`,
+      id: `claim_observed_${Date.now()}_${action.command.replace(/\s/g, "_")}`,
       kind: "observed",
-      text: `Command "${cmd.command}" failed with exit code ${cmd.exitCode}.`,
+      text: `Command "${action.command}" failed with exit code ${action.exit_code}.`,
       confidence: "high",
-      evidence: [`command output: ${cmd.output.slice(0, 200)}`],
+      evidence: [`command output: ${output.slice(0, 200)}`],
     });
   }
 
@@ -36,7 +37,7 @@ export function buildAgentReportedClaims(bundle: EvidenceBundle): Claim[] {
       kind: "agent_reported",
       text: "Agent trace was captured for this session.",
       confidence: "medium",
-      evidence: [".blackbox/agent-trace.md"],
+      evidence: [".witsmith/agent-trace.md"],
     },
   ];
 }

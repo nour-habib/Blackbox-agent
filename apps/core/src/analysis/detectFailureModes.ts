@@ -1,4 +1,4 @@
-import { CommandLog } from "../types";
+import { ActionEvent } from "../types";
 
 const FAILURE_PATTERNS: { pattern: RegExp; mode: string }[] = [
   { pattern: /docs?.*mismatch|mismatch.*docs?/i, mode: "docs_source_mismatch" },
@@ -11,18 +11,18 @@ const FAILURE_PATTERNS: { pattern: RegExp; mode: string }[] = [
   { pattern: /expected.*received|assert.*fail/i, mode: "assertion_failure" },
 ];
 
-export function detectFailureModes(commands: CommandLog[]): string[] {
+export function detectFailureModes(actions: ActionEvent[]): string[] {
   const modes = new Set<string>();
 
-  for (const cmd of commands) {
-    if (cmd.exitCode === 0) continue;
+  for (const action of actions) {
+    if (!action.executed || (action.exit_code ?? 0) === 0) continue;
+    const output = `${action.stdout ?? ""} ${action.stderr ?? ""}`;
     for (const { pattern, mode } of FAILURE_PATTERNS) {
-      if (pattern.test(cmd.output)) {
+      if (pattern.test(output)) {
         modes.add(mode);
       }
     }
-    // generic fallback
-    if (modes.size === 0 && cmd.exitCode !== 0) {
+    if (modes.size === 0) {
       modes.add("unknown_failure");
     }
   }

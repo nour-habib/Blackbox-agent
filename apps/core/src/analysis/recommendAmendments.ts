@@ -26,18 +26,18 @@ const RISKY_PATTERNS: { pattern: RegExp; rule: string; reason: string }[] = [
 export function recommendAmendments(bundle: EvidenceBundle): ContractAmendment[] {
   const amendments: ContractAmendment[] = [];
 
-  for (const cmd of bundle.commands) {
+  for (const action of bundle.actions) {
     for (const { pattern, rule, reason } of RISKY_PATTERNS) {
-      if (pattern.test(cmd.command)) {
+      if (pattern.test(action.command)) {
         amendments.push({
           id: `amendment_${Date.now()}_${rule}`,
-          sessionId: bundle.sessionId,
+          sessionId: (bundle.id ?? bundle.sessionId!),
           filePath: ".witsmith/AGENT_WIT.yaml",
-          diff: `+ ask:\n+   - pattern: "${cmd.command}"`,
+          diff: `+ ask:\n+   - pattern: "${action.command}"`,
           reason,
           evidence: [
-            `command "${cmd.command}" ran during session`,
-            `exit code: ${cmd.exitCode}`,
+            `command "${action.command}" ran during session`,
+            `exit code: ${action.exit_code ?? "unknown"}`,
           ],
           status: "suggested",
           createdAt: new Date().toISOString(),

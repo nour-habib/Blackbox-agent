@@ -1,25 +1,18 @@
-export type ContractDecision = {
-  decision: "allow" | "ask" | "block";
-  reason?: string;
-  ruleId?: string;
-};
-
-export type ContractEvent = {
-  id: string;
-  sessionId: string;
-  command?: string;
-  decision: "allow" | "ask" | "block";
-  ruleId?: string;
-  reason?: string;
-  createdAt: string;
-};
-
-export type CommandLog = {
+export type ActionEvent = {
+  action_id: string;
+  ts: string;
   command: string;
-  output: string;
-  exitCode: number;
-  createdAt: string;
-  contractDecision: ContractDecision;
+  cwd: string;
+  source: string;
+  decision: "allow" | "ask" | "deny";
+  reason?: string;
+  matched_rule?: string;
+  confidence?: number;
+  cache_hit?: boolean;
+  executed: boolean;
+  exit_code?: number;
+  stdout?: string;
+  stderr?: string;
 };
 
 export type SessionRecord = {
@@ -33,7 +26,8 @@ export type SessionRecord = {
 };
 
 export type EvidenceBundle = {
-  sessionId: string;
+  id: string;        // CLI field name
+  sessionId?: string; // alias kept for backwards compatibility
   task: string;
   repoPath: string;
   branch: string;
@@ -44,9 +38,8 @@ export type EvidenceBundle = {
   status: "finished";
   changedFiles: string[];
   diff: string;
-  commands: CommandLog[];
+  actions: ActionEvent[];
   agentTrace: string;
-  contractEvents: ContractEvent[];
 };
 
 export type Claim = {
