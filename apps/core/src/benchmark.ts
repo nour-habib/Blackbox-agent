@@ -7,7 +7,7 @@ import { SessionFile, EvidenceBundle, Claim, MemoryCard } from "./types";
 import { buildObservedClaims, buildAgentReportedClaims, buildInferredClaims } from "./analysis/buildClaims";
 import { detectFailureModes } from "./analysis/detectFailureModes";
 import { summarizeWithClod, inferHypothesesWithClod, generateMemoryCardsWithClod } from "./sponsors/clod";
-import { indexMemoriesWithNia, queryNia } from "./sponsors/nia";
+import { indexMemoriesWithNia } from "./sponsors/nia";
 import { keywordSearch } from "./memory/keywordSearch";
 import { runStaleCheck } from "./memory/runStaleCheck";
 import { prisma } from "./db/client";
@@ -79,48 +79,24 @@ async function main() {
     outputSummary: `${bundle.changedFiles.length} changed files, ${bundle.actions.length} actions`,
   });
 
-  // ── Step 2: Summarize (DeepSeek → CLōD fallback) ────────────────────────
-  let summaryStatus: StepStatus = "ok";
-  let summaryNote: string | undefined;
-  const { result: summary, ms: summarizeMs } = await time(async () => {
-    try {
-      if (!process.env.DEEPSEEK_API_KEY) throw new Error("no key");
-      return await summarizeWithClod(bundle);
-    } catch (e) {
-      summaryStatus = process.env.DEEPSEEK_API_KEY ? "fallback" : "fallback";
-      summaryNote = process.env.DEEPSEEK_API_KEY ? "DeepSeek failed → CLōD" : "no DEEPSEEK_API_KEY → CLōD";
-      return await summarizeWithClod(bundle);
-    }
-  });
+  // ── Step 2: Summarize (CLōD) ────────────────────────────────────────────
+  const { result: summary, ms: summarizeMs } = await time(() => summarizeWithClod(bundle));
   results.push({
     step: "Summarize session",
-    service: summaryNote?.includes("CLōD") ? "CLōD" : "DeepSeek",
+    service: "CLōD/haiku",
     latencyMs: summarizeMs,
-    status: summaryStatus,
+    status: "ok",
     outputSummary: qualityScore(summary),
-    note: summaryNote,
   });
 
-  // ── Step 3: Infer hypotheses (DeepSeek → CLōD fallback) ─────────────────
-  let inferStatus: StepStatus = "ok";
-  let inferNote: string | undefined;
-  const { result: hypotheses, ms: inferMs } = await time(async () => {
-    try {
-      if (!process.env.DEEPSEEK_API_KEY) throw new Error("no key");
-      return await inferHypothesesWithClod(bundle);
-    } catch {
-      inferStatus = "fallback";
-      inferNote = "no DEEPSEEK_API_KEY → CLōD";
-      return await inferHypothesesWithClod(bundle);
-    }
-  });
+  // ── Step 3: Infer hypotheses (CLōD) ─────────────────────────────────────
+  const { result: hypotheses, ms: inferMs } = await time(() => inferHypothesesWithClod(bundle));
   results.push({
     step: "Infer hypotheses",
-    service: inferNote ? "CLōD" : "DeepSeek",
+    service: "CLōD/haiku",
     latencyMs: inferMs,
-    status: inferStatus,
+    status: "ok",
     outputSummary: `${hypotheses.length} hypotheses`,
-    note: inferNote,
   });
 
   // ── Step 4: Build claims (local) ─────────────────────────────────────────
@@ -240,28 +216,18 @@ async function main() {
   });
 
   // ── Step 9: Get context for task ─────────────────────────────────────────
-  let contextStatus: StepStatus = "ok";
-  let contextNote: string | undefined;
   let retrievedCards: MemoryCard[] = [];
 
   const { ms: contextMs } = await time(async () => {
     const allMemories = cards.filter((m) => !m.isStale);
-    try {
-      retrievedCards = await queryNia(CONTEXT_TASK, allMemories);
-      contextNote = "Nia semantic search";
-    } catch {
-      retrievedCards = keywordSearch(allMemories, CONTEXT_TASK);
-      contextStatus = "fallback";
-      contextNote = "Nia failed → keyword search";
-    }
+    retrievedCards = keywordSearch(allMemories, CONTEXT_TASK);
   });
   results.push({
     step: "Get context for task",
-    service: contextNote?.includes("Nia") && contextStatus === "ok" ? "Nia" : "keyword search",
+    service: "keyword search",
     latencyMs: contextMs,
-    status: contextStatus,
+    status: "ok",
     outputSummary: `${retrievedCards.length} memories retrieved`,
-    note: contextNote,
   });
 
   // ── Step 10: Stale check ─────────────────────────────────────────────────

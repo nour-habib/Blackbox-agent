@@ -6,10 +6,13 @@ import { generateMemoryCards } from "../memory/generateMemories";
 import { summarizeWithClod, inferHypothesesWithClod } from "../sponsors/clod";
 import { enrichDiffWithGreptile } from "../sponsors/greptile";
 
-export async function analyzeBundle(bundle: EvidenceBundle): Promise<DebugReport> {
+export async function analyzeBundle(
+  bundle: EvidenceBundle,
+  handoffs: string[] = []
+): Promise<DebugReport> {
   const [summary, llmInferences, greptileEvidence] = await Promise.all([
-    summarizeWithClod(bundle),
-    inferHypothesesWithClod(bundle),
+    summarizeWithClod(bundle, handoffs),
+    inferHypothesesWithClod(bundle, handoffs),
     enrichDiffWithGreptile(bundle),
   ]);
 
@@ -25,7 +28,7 @@ export async function analyzeBundle(bundle: EvidenceBundle): Promise<DebugReport
   const recommendedContractAmendments = recommendAmendments(enrichedBundle);
 
   const allClaims = [...observedFacts, ...agentReportedClaims, ...inferredHypotheses];
-  const memoryCards = await generateMemoryCards(enrichedBundle, allClaims, summary);
+  const memoryCards = await generateMemoryCards(enrichedBundle, allClaims, summary, handoffs);
 
   return {
     sessionId: bundle.sessionId,

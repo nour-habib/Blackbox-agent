@@ -1,64 +1,36 @@
+import { execSync } from "child_process";
 import { MemoryCard } from "../types";
 
-// Nia by Nozomio — semantic retrieval layer
-// SDK: @nozomioai/nia (installed globally via nia-wizard)
-// Docs: https://docs.trynia.ai/api-guide
+// Nia by Nozomio is a CLI tool — it indexes codebases and docs, not custom memory cards.
+// Correct use: search the actual repo for codebase context to enrich memory card evidence.
+// Memory card retrieval uses keyword search (see keywordSearch.ts).
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-let niaClient: any = null;
+export function searchCodebaseWithNia(query: string, repoPath?: string): string | null {
+  const apiKey = process.env.NIA_API_KEY;
+  if (!apiKey) return null;
 
-async function getNiaClient() {
-  if (niaClient) return niaClient;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { Nia } = require("@nozomioai/nia");
-    niaClient = new Nia({ apiKey: process.env.NIA_API_KEY });
-    return niaClient;
+    const localFlag = repoPath ? `--local-folders "${repoPath}"` : "";
+    const result = execSync(
+      `nia search query "${query}" ${localFlag} --api-key ${apiKey}`,
+      { encoding: "utf-8", timeout: 15000, stdio: ["pipe", "pipe", "pipe"] }
+    );
+    return result.trim() || null;
   } catch {
-    throw new Error("@nozomioai/nia not installed. Run: npx nia-wizard@latest");
+    return null;
   }
 }
 
-export async function indexMemoriesWithNia(memories: MemoryCard[]): Promise<void> {
-  if (memories.length === 0) return;
-
-  try {
-    const nia = await getNiaClient();
-    const documents = memories.map((m) => ({
-      id: m.id,
-      content: [m.content, ...m.evidence, ...m.retrieveWhen].join(" "),
-      metadata: {
-        sessionId: m.sessionId,
-        type: m.type,
-        confidence: m.confidence,
-        sourceFiles: m.sourceFiles,
-      },
-    }));
-
-    await nia.index(documents);
-  } catch (err) {
-    // Non-fatal: keyword search will be used as fallback
-    console.warn("[nia] Indexing failed, keyword search will be used as fallback:", err);
-  }
+// No-op kept for call-site compatibility — Nia doesn't index custom memory cards
+export async function indexMemoriesWithNia(_memories: MemoryCard[]): Promise<void> {
+  return;
 }
 
+// Memory card retrieval is handled by keywordSearch.ts — not Nia
+// Nia is available as codebase context enrichment via searchCodebaseWithNia()
 export async function queryNia(
-  task: string,
+  _task: string,
   memories: MemoryCard[]
 ): Promise<MemoryCard[]> {
-  const nia = await getNiaClient();
-
-  const results: { id: string; score: number }[] = await nia.search(task, {
-    topK: 5,
-    filter: { isStale: false },
-  });
-
-  const idSet = new Set(results.map((r) => r.id));
-  const ranked = results
-    .map((r) => memories.find((m) => m.id === r.id))
-    .filter((m): m is MemoryCard => m !== undefined && !m.isStale);
-
-  // Append any memories not returned by Nia but still valid (fallback)
-  const rest = memories.filter((m) => !idSet.has(m.id) && !m.isStale);
-  return [...ranked, ...rest];
+  return memories;
 }

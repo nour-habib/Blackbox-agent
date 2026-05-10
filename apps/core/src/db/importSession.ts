@@ -18,10 +18,28 @@ function serializeArray(arr: string[]): string {
   return JSON.stringify(arr);
 }
 
+function readHandoffs(repoPath: string): string[] {
+  const handoffsDir = path.join(repoPath, ".witsmith", "handoffs");
+  if (!fs.existsSync(handoffsDir)) return [];
+  return fs
+    .readdirSync(handoffsDir)
+    .filter((f) => f.endsWith(".md"))
+    .map((f) => {
+      try {
+        return fs.readFileSync(path.join(handoffsDir, f), "utf-8").trim();
+      } catch {
+        return null;
+      }
+    })
+    .filter((content): content is string => content !== null && content.length > 0);
+}
+
 export async function importSession(sessionJsonPath: string): Promise<MemoryCard[]> {
   const raw = fs.readFileSync(sessionJsonPath, "utf-8");
   const sessionFile: SessionFile = JSON.parse(raw);
   const bundle = sessionFile.evidenceBundle;
+
+  const handoffs = readHandoffs(bundle.repoPath);
 
   // upsert session row
   await prisma.session.upsert({
@@ -44,8 +62,8 @@ export async function importSession(sessionJsonPath: string): Promise<MemoryCard
     },
   });
 
-  // generate memory cards via CLōD
-  const report = await analyzeBundle(bundle);
+  // generate memory cards via CLōD, enriched with any handoff notes
+  const report = await analyzeBundle(bundle, handoffs);
 
   // store memory cards
   for (const card of report.memoryCards) {

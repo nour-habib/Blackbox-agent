@@ -6,3 +6,17 @@ node_modules/
 Thumbs.db
 *.log
 npm-debug.log*
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+
+# Database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+
+# Tool runtime / caches
+.witsmith/

@@ -5,9 +5,10 @@ import { indexMemoriesWithNia } from "../sponsors/nia";
 export async function generateMemoryCards(
   bundle: EvidenceBundle,
   claims: Claim[],
-  summary: string
+  summary: string,
+  handoffs: string[] = []
 ): Promise<MemoryCard[]> {
-  const cards = await generateMemoryCardsWithClod(bundle, claims, summary);
+  const cards = await generateMemoryCardsWithClod(bundle, claims, summary, handoffs);
   await indexMemoriesWithNia(cards);
   return cards;
 }

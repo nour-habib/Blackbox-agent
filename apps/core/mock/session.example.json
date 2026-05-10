@@ -2,7 +2,7 @@
   "evidenceBundle": {
     "sessionId": "session_001",
     "task": "Fix OAuth redirect bug",
-    "repoPath": "/repo/demo-auth-app",
+    "repoPath": "./mock",
     "branch": "main",
     "baseCommit": "abc123",
     "endCommit": "abc124",
