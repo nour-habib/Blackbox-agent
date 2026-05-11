@@ -4,6 +4,7 @@ import * as path from "path";
 import { prisma } from "./client";
 import { SessionFile, MemoryCard } from "../types";
 import { analyzeBundle } from "../analysis/analyzeBundle";
+import { loadMemories } from "../memory/storeMemories";
 
 function hashFile(filePath: string): string | null {
   try {
@@ -39,14 +40,22 @@ export async function importSession(sessionJsonPath: string): Promise<MemoryCard
   const sessionFile: SessionFile = JSON.parse(raw);
   const bundle = sessionFile.evidenceBundle;
 
+  const sessionId = bundle.id ?? bundle.sessionId!;
   const handoffs = readHandoffs(bundle.repoPath);
+
+  // skip re-analysis if session already has memory cards
+  const existing = await prisma.memoryCard.findFirst({ where: { sessionId } });
+  if (existing) {
+    console.log(`  [import] session ${sessionId} already analysed — skipping CLōD`);
+    return loadMemories(sessionId);
+  }
 
   // upsert session row
   await prisma.session.upsert({
-    where: { id: (bundle.id ?? bundle.sessionId!) },
+    where: { id: sessionId },
     update: {},
     create: {
-      id: (bundle.id ?? bundle.sessionId!),
+      id: sessionId,
       task: bundle.task,
       repoPath: bundle.repoPath,
       branch: bundle.branch,
@@ -72,7 +81,7 @@ export async function importSession(sessionJsonPath: string): Promise<MemoryCard
       update: { isStale: card.isStale },
       create: {
         id: card.id,
-        sessionId: (bundle.id ?? bundle.sessionId!),
+        sessionId: sessionId,
         type: card.type,
         claimType: card.claimType,
         content: card.content,
@@ -98,9 +107,9 @@ export async function importSession(sessionJsonPath: string): Promise<MemoryCard
     if (!hash) continue;
 
     await prisma.sourceFileHash.upsert({
-      where: { sessionId_filePath: { sessionId: (bundle.id ?? bundle.sessionId!), filePath: relPath } },
+      where: { sessionId_filePath: { sessionId: sessionId, filePath: relPath } },
       update: { hash },
-      create: { sessionId: (bundle.id ?? bundle.sessionId!), filePath: relPath, hash },
+      create: { sessionId: sessionId, filePath: relPath, hash },
     });
   }
 
