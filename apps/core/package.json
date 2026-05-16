@@ -8,6 +8,7 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
+    "test": "jest",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio"
@@ -20,8 +21,11 @@
     "openai": "^6.37.0"
   },
   "devDependencies": {
+    "@types/jest": "^30.0.0",
     "@types/node": "^20.0.0",
+    "jest": "^30.4.2",
     "prisma": "^6.0.0",
+    "ts-jest": "^29.4.9",
     "typescript": "^5.4.0"
   }
 }

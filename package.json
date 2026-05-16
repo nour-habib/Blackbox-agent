@@ -30,5 +30,8 @@
   "bugs": {
     "url": "https://github.com/aristi1215/Blackbox-agent/issues"
   },
-  "homepage": "https://github.com/aristi1215/Blackbox-agent#readme"
+  "homepage": "https://github.com/aristi1215/Blackbox-agent#readme",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
 }
