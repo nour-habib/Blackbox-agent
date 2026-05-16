@@ -11,7 +11,8 @@ import { OrbitalCenterpiece } from "../components/ui/OrbitalCenterpiece";
 import { LinkButton } from "../components/ui/Button";
 import { Badge } from "../components/ui/Badge";
 import { SponsorBadge } from "../components/ui/SponsorBadge";
-import { sponsorMeta, type SponsorTag } from "../lib/mockData";
+import { sponsorMeta, type SponsorTag } from "../lib/display";
+import { useApiHealth, useLiveSessions } from "../lib/useApi";
 
 /**
  * Landing page — redesigned to be lighter and more focused.
@@ -39,6 +40,10 @@ export function LandingPage() {
 /* ------------------------- Hero ------------------------- */
 
 function HeroSection() {
+  const { live, checking } = useApiHealth();
+  const { data: sessions } = useLiveSessions();
+  const sessionCount = sessions.length;
+
   return (
     <section className="relative px-6 pb-20 pt-12 md:pt-16">
       <HeroBackdrop />
@@ -52,12 +57,34 @@ function HeroSection() {
             className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-[12px] text-white/70 backdrop-blur"
           >
             <span className="relative flex h-1.5 w-1.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[color:var(--color-violet-glow)] opacity-60" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[color:var(--color-violet-glow)]" />
+              <span
+                className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
+                style={{
+                  background: live
+                    ? "var(--color-success)"
+                    : checking
+                    ? "var(--color-violet-glow)"
+                    : "var(--color-danger)",
+                }}
+              />
+              <span
+                className="relative inline-flex h-1.5 w-1.5 rounded-full"
+                style={{
+                  background: live
+                    ? "var(--color-success)"
+                    : checking
+                    ? "var(--color-violet-glow)"
+                    : "var(--color-danger)",
+                }}
+              />
             </span>
-            <span>Recording session #04812</span>
+            <span>{checking ? "checking backend…" : live ? "backend online" : "backend offline"}</span>
             <span className="text-white/30">·</span>
-            <span className="text-white/50">live demo</span>
+            <span className="text-white/50">
+              {sessionCount > 0
+                ? `${sessionCount} recorded session${sessionCount === 1 ? "" : "s"}`
+                : "no sessions yet"}
+            </span>
           </motion.div>
 
           <h1 className="mt-6 font-serif text-[44px] leading-[1.04] tracking-tight text-white text-balance md:text-[68px]">

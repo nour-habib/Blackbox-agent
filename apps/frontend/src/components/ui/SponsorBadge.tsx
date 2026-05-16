@@ -1,4 +1,4 @@
-import { sponsorMeta, type SponsorTag } from "../../lib/mockData";
+import { sponsorMeta, type SponsorTag } from "../../lib/display";
 import { cn } from "../../lib/cn";
 
 export function SponsorBadge({

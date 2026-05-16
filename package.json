@@ -9,10 +9,11 @@
     "frontend:build": "cd apps/frontend && npm run build",
     "frontend:lint": "cd apps/frontend && npm run lint",
     "frontend:preview": "cd apps/frontend && npm run preview",
-    "backend:dev": "cd apps/backend && npm run dev",
-    "backend:build": "cd apps/backend && npm run build",
-    "backend:lint": "cd apps/backend && npm run lint",
-    "backend:preview": "cd apps/backend && npm run preview"
+    "backend:dev": "npm --workspace @blackbox/backend run dev",
+    "backend:build": "npm --workspace @blackbox/backend run build",
+    "backend:start": "npm --workspace @blackbox/backend run start",
+    "core:build": "npm --workspace @blackbox/core run build",
+    "core:db:push": "npm --workspace @blackbox/core run db:push"
   },
   "repository": {
     "type": "git",

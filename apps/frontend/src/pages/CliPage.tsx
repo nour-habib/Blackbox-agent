@@ -1,10 +1,83 @@
 import { useState } from "react";
 import { motion } from "motion/react";
 import { Terminal, Copy, Check, ChevronRight, BookOpen } from "lucide-react";
-import { cliCommands } from "../lib/mockData";
 import { Badge } from "../components/ui/Badge";
 import { AnimatedTerminal } from "../components/ui/AnimatedTerminal";
 import { cn } from "../lib/cn";
+
+/**
+ * Static reference for the Python `witsmith` CLI shipped under
+ * `apps/cli/witsmith/`. This is documentation (not runtime data), so we
+ * keep it inline rather than fetch from the backend. Sample outputs are
+ * representative — real output is captured in `.witsmith/log.jsonl`.
+ */
+type CliCommand = {
+  cmd: string;
+  desc: string;
+  output: string[];
+};
+
+const cliCommands: CliCommand[] = [
+  {
+    cmd: 'witsmith init',
+    desc: "Drop AGENT_WIT.yaml, .witsmith/ runtime dir and the Cursor rule into the current repo.",
+    output: [
+      "✓ wrote AGENT_WIT.yaml",
+      "✓ created .witsmith/ (sessions/ handoffs/ config.json)",
+      "✓ wrote .cursor/rules/witsmith-memory.mdc",
+    ],
+  },
+  {
+    cmd: 'witsmith start "Fix OAuth redirect bug"',
+    desc: "Snapshot the working tree and open a recording session.",
+    output: [
+      "→ snapshot at d4f2ac3e",
+      "→ wrote .witsmith/active-session.json (session_1778452955858)",
+      "✓ session started — agent can now run as usual",
+    ],
+  },
+  {
+    cmd: 'witsmith run "npm test" --no-exec',
+    desc: "Match a command against AGENT_WIT.yaml; emit allow / ask / deny.",
+    output: [
+      "🟢 ALLOW — matched allow pattern:npm test",
+      "   matched_rule: pattern:npm test",
+      "   confidence: 0.90",
+    ],
+  },
+  {
+    cmd: 'witsmith finish',
+    desc: "Package diff + actions + agent trace into .witsmith/sessions/<id>.json.",
+    output: [
+      "✓ wrote .witsmith/sessions/session_1778452955858.json",
+    ],
+  },
+  {
+    cmd: 'witsmith context "refresh-token validation"',
+    desc: "Retrieve relevant memories for a new task and write .witsmith/context.md.",
+    output: [
+      "→ POST /api/context",
+      "✓ 3 memory cards retrieved",
+      "✓ wrote .witsmith/context.md (Cursor will pick it up)",
+    ],
+  },
+  {
+    cmd: 'witsmith stale-check',
+    desc: "Re-hash every staleIfChanged file; mark cards stale when their source moves.",
+    output: [
+      "→ POST /api/stale-check",
+      "✓ checked 10 cards · 0 stale",
+    ],
+  },
+  {
+    cmd: 'witsmith amend --last',
+    desc: "After a deny, propose a YAML amendment that hardens or relaxes the rule.",
+    output: [
+      "▶ analyzing last deny: git push --force origin main",
+      "✓ proposed: deny → ask + path scope to refs/heads/main",
+    ],
+  },
+];
 
 export function CliPage() {
   const [active, setActive] = useState(0);
@@ -48,8 +121,8 @@ export function CliPage() {
         {/* Install */}
         <div className="mt-8 grid gap-3 md:grid-cols-2">
           {[
-            { label: "Install", cmd: "uv pip install witsmith" },
-            { label: "Initialize in your repo", cmd: "witsmith init" },
+            { label: "Install", cmd: "uv sync && uv pip install -e ./apps/cli/witsmith" },
+            { label: "Initialize in your repo", cmd: "witsmith init --cwd ." },
           ].map((x, idx) => (
             <motion.div
               key={x.label}
@@ -208,17 +281,28 @@ export function CliPage() {
           </p>
           <pre className="mt-4 overflow-x-auto rounded-xl border border-white/5 bg-[#08080d] px-5 py-4 font-mono text-[12.5px] leading-[1.7] text-white/90">
 {`{
-  "id":            "session_001",
-  "task":          "Fix OAuth redirect bug",
-  "started_at":    "2026-05-08T14:02:00Z",
-  "finished_at":   "2026-05-08T14:42:11Z",
-  "base_commit":   "a3f12c9",
-  "end_commit":    "9d7e2b1",
-  "branch":        "fix/oauth-redirect",
-  "changed_files": ["src/auth/callback.ts", "src/auth/session.ts", "tests/auth-callback.test.ts"],
-  "diff":          "<unified diff>",
-  "commands":      [{ "command": "pnpm test:auth", "exit_code": 0, "duration_ms": 4200 }],
-  "file_hashes":   { "src/auth/session.ts": "abc123" }
+  "evidenceBundle": {
+    "id":           "session_1778452955858",
+    "task":         "Wire frontend to live backend",
+    "repoPath":     "C:/.../apps/cli/witsmith/demo-repo",
+    "branch":       "dev/frontend-redesign",
+    "baseCommit":   "d4f2ac3e456b22f4a4c951a626e17de40e7c6827",
+    "endCommit":    "d4f2ac3e456b22f4a4c951a626e17de40e7c6827",
+    "startedAt":    "2026-05-10T22:43:00.000Z",
+    "finishedAt":   "2026-05-10T22:43:45.000Z",
+    "status":       "finished",
+    "changedFiles": [],
+    "diff":         "",
+    "actions":      [{ "command": "npm test", "decision": "allow", "executed": false }],
+    "agentTrace":   "# Witsmith Agent Trace ..."
+  },
+  "report": {
+    "summary":            "...",
+    "observedFacts":      [],
+    "agentReportedClaims":[],
+    "inferredHypotheses": [],
+    "memoryCards":        []
+  }
 }`}
           </pre>
         </div>

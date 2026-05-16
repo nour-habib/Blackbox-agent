@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import { AlertTriangle, Brain, FileCode2, Sparkles, ShieldAlert, Workflow, Library } from "lucide-react";
-import type { MemoryCard } from "../../lib/mockData";
-import { formatRelative } from "../../lib/mockData";
+import type { MemoryCard } from "../../lib/display";
+import { formatRelative } from "../../lib/display";
 import { Badge } from "./Badge";
 import { SponsorBadge } from "./SponsorBadge";
 import { cn } from "../../lib/cn";

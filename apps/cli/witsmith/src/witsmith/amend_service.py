@@ -16,6 +16,19 @@ from witsmith.models import Rule
 from witsmith.wit_file import load_wit
 
 
+def _shell_fingerprint_pattern(command: str, *, max_len: int = 480) -> str | None:
+    """Literal shell line usable as an fnmatch pattern for deny.pattern.
+
+    Skips strings that contain fnmatch metacharacters or exceed YAML-friendly length.
+    """
+    cmd = command.strip()
+    if not cmd or len(cmd) > max_len:
+        return None
+    if any(ch in cmd for ch in "*?["):
+        return None
+    return cmd
+
+
 def mock_amendment_diff(wit_yaml: str, log_event: dict[str, Any]) -> str:
     """Unified-diff style snippet for the demo wow moment."""
     _ = wit_yaml  # reserved if we later anchor on real line numbers
@@ -131,7 +144,11 @@ def _persist_contract_amendment(repo_root: Path, amendment: ContractAmendment) -
 
 
 def apply_demo_path_rules(wit_path: Path, log_event: dict[str, Any]) -> None:
-    """Append narrow path deny rules after a deny — keeps YAML valid for the demo."""
+    """Append narrow deny rules after a deny — keeps YAML valid for the demo.
+
+    Adds path guards for notes files plus an exact shell fingerprint (pattern) so a
+    later check from a trusted ``source`` still hits structured deny before generic LLM.
+    """
     wit = load_wit(wit_path)
     src = str(log_event.get("source") or "repo file")
     wit.deny.append(
@@ -140,6 +157,14 @@ def apply_demo_path_rules(wit_path: Path, log_event: dict[str, Any]) -> None:
             reason=f"auto-amended after deny (source={src})",
         )
     )
+    fp = _shell_fingerprint_pattern(str(log_event.get("command") or ""))
+    if fp is not None:
+        wit.deny.append(
+            Rule(
+                pattern=fp,
+                reason=f"auto-amended blocked shell fingerprint (source={src})",
+            )
+        )
     payload = wit.model_dump(mode="json", exclude_none=True)
     wit_path.write_text(
         yaml.safe_dump(payload, sort_keys=False, allow_unicode=True),

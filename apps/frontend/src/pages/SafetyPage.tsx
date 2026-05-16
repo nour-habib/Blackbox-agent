@@ -12,12 +12,12 @@ import {
   XCircle,
 } from "lucide-react";
 import {
-  contractRules,
-  safetyEvents,
   type ContractDecision,
   type SafetyEvent,
-} from "../lib/mockData";
+} from "../lib/display";
+import { useContractRules, useSafetyEvents } from "../lib/useApi";
 import { Badge } from "../components/ui/Badge";
+import { SourceTag } from "../components/ui/SourceTag";
 import { cn } from "../lib/cn";
 
 /**
@@ -29,6 +29,31 @@ import { cn } from "../lib/cn";
 export function SafetyPage() {
   const [filter, setFilter] = useState<"all" | ContractDecision>("all");
   const [query, setQuery] = useState("");
+  const {
+    data: contractRules,
+    source: rulesSource,
+    loading: rulesLoading,
+    refresh: refreshRules,
+  } = useContractRules();
+  const {
+    data: safetyEvents,
+    source: eventsSource,
+    loading: eventsLoading,
+    refresh: refreshEvents,
+  } = useSafetyEvents();
+
+  // Pick the most informative source so a single tag tells the truth.
+  const pageSource =
+    rulesSource === "error" || eventsSource === "error"
+      ? "error"
+      : rulesSource === "live" && eventsSource === "live"
+      ? "live"
+      : "empty";
+  const pageLoading = rulesLoading || eventsLoading;
+  const refreshBoth = () => {
+    refreshRules();
+    refreshEvents();
+  };
 
   const filtered = useMemo(() => {
     return safetyEvents.filter((e) => {
@@ -41,7 +66,7 @@ export function SafetyPage() {
         e.cwd.toLowerCase().includes(q);
       return matchDecision && matchQuery;
     });
-  }, [filter, query]);
+  }, [safetyEvents, filter, query]);
 
   const counts = useMemo(() => {
     return {
@@ -49,16 +74,19 @@ export function SafetyPage() {
       ask: safetyEvents.filter((e) => e.decision === "ask").length,
       deny: safetyEvents.filter((e) => e.decision === "deny").length,
     };
-  }, []);
+  }, [safetyEvents]);
 
   return (
     <div className="px-4 py-8 lg:px-8">
       <div className="mx-auto max-w-6xl">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <Badge tone="violet" className="mb-3">
-              <ShieldCheck className="h-3 w-3" /> command gatekeeper
-            </Badge>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <Badge tone="violet">
+                <ShieldCheck className="h-3 w-3" /> command gatekeeper
+              </Badge>
+              <SourceTag source={pageSource} loading={pageLoading} onRefresh={refreshBoth} />
+            </div>
             <h1 className="font-serif text-[34px] leading-tight text-white text-balance md:text-[44px]">
               Every command, gated by your contract.
             </h1>
@@ -220,8 +248,8 @@ export function SafetyPage() {
             </div>
 
             <p className="mt-3 px-1 text-[11.5px] text-white/45">
-              Live tail of <span className="font-mono">.witsmith/log.jsonl</span>. Demo data — wire
-              up <span className="font-mono">witsmith-server</span> to stream real events.
+              Live tail of <span className="font-mono">.witsmith/log.jsonl</span> served by{" "}
+              <span className="font-mono">/api/safety/events</span>.
             </p>
           </div>
         </div>

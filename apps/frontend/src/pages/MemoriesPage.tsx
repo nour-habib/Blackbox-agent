@@ -9,11 +9,14 @@ import {
   AlertTriangle,
   ScanLine,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
-import { memoryCards, sessions } from "../lib/mockData";
+import { useLiveSessions, useMemories, useStaleCheck, useContext } from "../lib/useApi";
 import { MemoryCardItem } from "../components/ui/MemoryCardItem";
 import { Badge } from "../components/ui/Badge";
+import { SourceTag } from "../components/ui/SourceTag";
 import { cn } from "../lib/cn";
+import { adaptMemoryCard } from "../lib/api";
 
 type CardType = "episodic" | "semantic" | "procedural" | "risk";
 
@@ -30,6 +33,10 @@ export function MemoriesPage() {
   const [type, setType] = useState<"all" | CardType>("all");
   const [staleOnly, setStaleOnly] = useState(false);
   const [taskQuery, setTaskQuery] = useState("");
+  const { data: memoryCards, source, loading, refresh } = useMemories();
+  const { data: sessions } = useLiveSessions();
+  const stale = useStaleCheck();
+  const context = useContext();
 
   const filtered = useMemo(() => {
     return memoryCards.filter((c) => {
@@ -44,35 +51,38 @@ export function MemoriesPage() {
         c.source_files.some((f) => f.toLowerCase().includes(q));
       return matchType && matchStale && matchQuery;
     });
-  }, [query, type, staleOnly]);
+  }, [memoryCards, query, type, staleOnly]);
 
   const staleCount = memoryCards.filter((c) => c.is_stale).length;
 
-  // Simulated retrieval
+  // Live retrieval — call POST /api/context with the typed task.
   const suggested = useMemo(() => {
-    if (!taskQuery.trim()) return [];
-    const q = taskQuery.toLowerCase();
-    return memoryCards
-      .map((c) => {
-        const score = c.retrieve_when.reduce(
-          (acc, k) => acc + (q.includes(k) ? 2 : 0),
-          0
-        ) + (q.split(/\s+/).some((w) => c.title.toLowerCase().includes(w)) ? 1 : 0);
-        return { c, score };
-      })
-      .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 4);
-  }, [taskQuery]);
+    const remote = context.result?.memories;
+    if (!remote || remote.length === 0) return [];
+    return remote.map((c) => ({ c: adaptMemoryCard(c) }));
+  }, [context.result]);
+
+  async function runStaleCheck() {
+    const r = await stale.run();
+    if (r) refresh();
+  }
+
+  async function runContext(task: string) {
+    setTaskQuery(task);
+    if (task.trim()) await context.run(task, 4);
+  }
 
   return (
     <div className="px-4 py-8 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <Badge tone="violet" className="mb-3">
-              <Brain className="h-3 w-3" /> agent memory
-            </Badge>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <Badge tone="violet">
+                <Brain className="h-3 w-3" /> agent memory
+              </Badge>
+              <SourceTag source={source} loading={loading} onRefresh={refresh} />
+            </div>
             <h1 className="font-serif text-[36px] leading-tight text-white md:text-[44px]">
               The lessons your agents leave behind.
             </h1>
@@ -82,9 +92,21 @@ export function MemoriesPage() {
               change.
             </p>
           </div>
-          <button className="inline-flex h-10 items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 text-[13px] text-white hover:border-white/20">
-            <ScanLine className="h-4 w-4 text-[color:var(--color-acid)]" />
-            Run stale check
+          <button
+            onClick={runStaleCheck}
+            disabled={stale.running}
+            className="inline-flex h-10 items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 text-[13px] text-white hover:border-white/20 disabled:opacity-60"
+          >
+            {stale.running ? (
+              <Loader2 className="h-4 w-4 animate-spin text-[color:var(--color-violet-glow)]" />
+            ) : (
+              <ScanLine className="h-4 w-4 text-[color:var(--color-violet-glow)]" />
+            )}
+            {stale.running
+              ? "Re-hashing…"
+              : stale.result
+              ? `Re-checked · ${stale.result.staleCount} stale`
+              : "Run stale check"}
           </button>
         </div>
 
@@ -150,38 +172,44 @@ export function MemoriesPage() {
             </div>
           </div>
           <div className="px-5 py-5">
-            <div className="relative">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                runContext(taskQuery);
+              }}
+              className="relative"
+            >
               <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-[12px] text-[color:var(--color-acid)]">
                 $
               </span>
               <input
                 value={taskQuery}
                 onChange={(e) => setTaskQuery(e.target.value)}
-                placeholder='witsmith context "fix oauth token expiry"'
-                className="h-11 w-full rounded-xl border border-white/10 bg-[color:var(--color-bg-soft)] pl-7 pr-3 font-mono text-[13px] text-white placeholder-white/35 outline-none focus:border-[color:var(--color-acid)]/50"
+                placeholder='POST /api/context — type a task and press Enter'
+                className="h-11 w-full rounded-xl border border-white/10 bg-[color:var(--color-bg-soft)] pl-7 pr-24 font-mono text-[13px] text-white placeholder-white/35 outline-none focus:border-[color:var(--color-acid)]/50"
               />
-            </div>
+              <button
+                type="submit"
+                disabled={!taskQuery.trim() || context.running}
+                className="absolute right-1.5 top-1/2 inline-flex h-8 -translate-y-1/2 items-center gap-1.5 rounded-lg border border-[color:var(--color-acid)]/40 bg-[color:var(--color-acid)]/10 px-3 text-[12px] font-medium text-[color:var(--color-acid)] hover:bg-[color:var(--color-acid)]/20 disabled:opacity-50"
+              >
+                {context.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "retrieve"}
+              </button>
+            </form>
             <div className="mt-4">
-              {!taskQuery.trim() ? (
-                <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-white/55">
-                  <span className="text-white/35">try:</span>
-                  {[
-                    "fix oauth token expiry",
-                    "add comment avatars",
-                    "investigate cart race",
-                  ].map((q) => (
-                    <button
-                      key={q}
-                      onClick={() => setTaskQuery(q)}
-                      className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-0.5 hover:border-white/25 hover:text-white"
-                    >
-                      {q}
-                    </button>
-                  ))}
+              {context.error ? (
+                <div className="rounded-xl border border-[color:var(--color-danger)]/30 bg-[color:var(--color-danger)]/[0.06] px-4 py-3 text-[12.5px] text-[color:var(--color-danger)]">
+                  {context.error}
+                </div>
+              ) : !context.result ? (
+                <div className="text-[12px] text-white/55">
+                  Type a task above and hit retrieve to query{" "}
+                  <span className="font-mono text-white/70">/api/context</span> for matching memory
+                  cards.
                 </div>
               ) : suggested.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-white/10 px-4 py-6 text-center text-[12.5px] text-white/55">
-                  No relevant memories. Your agent will start fresh.
+                  No relevant memories returned. Your agent will start fresh.
                 </div>
               ) : (
                 <div className="grid gap-3 md:grid-cols-2">
@@ -244,9 +272,17 @@ export function MemoriesPage() {
 
         {/* Cards */}
         <div className="mt-6">
-          {filtered.length === 0 ? (
+          {memoryCards.length === 0 && !loading ? (
             <div className="rounded-2xl border border-dashed border-white/10 px-5 py-16 text-center text-sm text-white/55">
-              No memory cards match.
+              No memory cards yet. Run{" "}
+              <span className="font-mono text-white/75">witsmith finish</span> in a session-tracked
+              repo, then{" "}
+              <span className="font-mono text-white/75">POST /api/import-session</span> to generate
+              cards.
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/10 px-5 py-16 text-center text-sm text-white/55">
+              No memory cards match these filters.
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -260,7 +296,8 @@ export function MemoriesPage() {
         {/* Footer note */}
         <div className="mt-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/[0.02] px-5 py-4 text-[12px] text-white/55">
           <span>
-            Memory cards are derived from {sessions.length} sessions across the demo dataset.
+            {memoryCards.length} card{memoryCards.length === 1 ? "" : "s"} derived from{" "}
+            {sessions.length} session{sessions.length === 1 ? "" : "s"} on disk.
           </span>
           <span className="font-mono">
             stale_if_changed → re-hashed every `witsmith stale-check`

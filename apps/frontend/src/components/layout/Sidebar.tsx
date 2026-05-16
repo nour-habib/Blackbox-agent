@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { Logo } from "./Logo";
-import { sponsorMeta } from "../../lib/mockData";
+import { sponsorMeta } from "../../lib/display";
 import { cn } from "../../lib/cn";
 
 const items = [

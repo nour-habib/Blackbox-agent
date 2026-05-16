@@ -65,6 +65,16 @@ For a live CLōD route check, configure `.env` with `CLOD_API_KEY`, then run:
 uv run python scripts/smoke_clod.py
 ```
 
+## Feedback loop demo (policy evolution)
+
+Run the scripted proof that a deny flows through **amend --apply** into **evolved YAML**, including a **structured fingerprint deny** when the same shell is retried with `--source user` (NL stays first for repo-sourced replay):
+
+```bash
+./scripts/demo_feedback_loop.sh
+```
+
+The script restores `demo-repo/AGENT_WIT.yaml` afterward. See `WITSMITH_DEMO_CONTEXT.md` for why identical repo-sourced retries still report `meta.path: nl`.
+
 ## Recorder Flow Test
 
 ```bash

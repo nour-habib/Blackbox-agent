@@ -84,6 +84,27 @@ uv run --no-project --with pydantic --with pyyaml --with fastmcp --with openai -
 
 Do not use `--apply` unless you want to actually modify `AGENT_WIT.yaml`.
 
+## Proof the feedback loop closes
+
+Important detail for demos and judging:
+
+1. **NL checks run before structured rules** when the wit has natural-language deny rules *and* the action uses a non-trusted `source` (for example `RECENT_NOTES.md`).  
+   So repeating the **same injected command** with the **same repo source** after `amend --apply` usually **still** shows `_witsmith.meta.path === "nl"`. That is expected—the policy file **still evolved** (new deny rows); the pipeline order did not flip.
+
+2. **`amend --apply`** appends concrete deny rows: path guards for notes files plus an **exact shell fingerprint** (`deny.pattern` equals the blocked command line when safe).  
+   Re-running **`witsmith run` with `--source user`** skips NL for that scenario so you get **`_witsmith.meta.path === "structured"`** and `matched_rule` like `pattern:curl …`. That is the crisp proof that **policy tightened**, not only that NL blocked again.
+
+3. **Artifacts**: `.witsmith/log.jsonl` grows per decision; `.witsmith/amendments/*.json` stores `ContractAmendment`; `git diff AGENT_WIT.yaml` shows evolution after `--apply`.
+
+Automated walk-through (restores `demo-repo/AGENT_WIT.yaml` on exit):
+
+```bash
+cd apps/cli/witsmith
+./scripts/demo_feedback_loop.sh
+```
+
+Uses `WITSMITH_MOCK_LLM=1` by default for deterministic judging/offline rooms.
+
 ## One-Liner
 
 Witsmith turns agent actions into enforceable contracts, replayable events, and amendable policy, so future agents need less context and make safer decisions.

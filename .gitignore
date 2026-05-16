@@ -6,8 +6,11 @@ node_modules/
 Thumbs.db
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# Environment & secrets
+# Environment / secrets — use *.example templates for tracked samples
 .env
 .env.local
 .env.*.local
@@ -20,3 +23,13 @@ npm-debug.log*
 
 # Tool runtime / caches
 .witsmith/
+
+# Python (packages may define more-specific rules)
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/

@@ -14,68 +14,80 @@ import {
   Layers,
   Activity,
   Brain,
-  Coins,
+  Hash,
 } from "lucide-react";
-import {
-  sessions,
-  formatDuration,
-  formatRelative,
-  type SessionStatus,
-} from "../lib/mockData";
+import { formatDuration, formatRelative } from "../lib/display";
+import { useLiveSessions, type LiveSessionSummary } from "../lib/useApi";
 import { Badge } from "../components/ui/Badge";
 import { Sparkline } from "../components/ui/Sparkline";
 import { AnimatedNumber } from "../components/ui/AnimatedNumber";
-import { ConfidenceMeter } from "../components/ui/ConfidenceMeter";
+import { SourceTag } from "../components/ui/SourceTag";
 import { cn } from "../lib/cn";
 
-const statusFilters: { id: "all" | SessionStatus; label: string }[] = [
+type StatusFilter = "all" | "finished" | "running";
+
+const statusFilters: { id: StatusFilter; label: string }[] = [
   { id: "all", label: "All" },
-  { id: "success", label: "Resolved" },
-  { id: "partial", label: "Partial" },
-  { id: "failed", label: "Failed" },
+  { id: "finished", label: "Finished" },
   { id: "running", label: "Running" },
 ];
 
 export function SessionsPage() {
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<"all" | SessionStatus>("all");
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const {
+    data: sessions,
+    source,
+    loading,
+    error,
+    refresh,
+  } = useLiveSessions();
 
   const filtered = useMemo(() => {
     return sessions.filter((s) => {
-      const matchStatus = status === "all" || s.status === status;
+      const matchStatus =
+        status === "all" ||
+        (status === "finished" && (s.status === "finished" || s.status === "success")) ||
+        (status === "running" && s.status === "running");
       const q = query.trim().toLowerCase();
       const matchQuery =
         !q ||
         s.task.toLowerCase().includes(q) ||
-        s.repo.toLowerCase().includes(q) ||
-        s.branch.toLowerCase().includes(q) ||
+        (s.repoPath ?? "").toLowerCase().includes(q) ||
+        (s.branch ?? "").toLowerCase().includes(q) ||
         s.id.toLowerCase().includes(q);
       return matchStatus && matchQuery;
     });
-  }, [query, status]);
+  }, [sessions, query, status]);
 
   const stats = useMemo(() => {
     const total = sessions.length;
-    const ok = sessions.filter((s) => s.status === "success").length;
-    const totalCards = sessions.reduce((acc, s) => acc + s.memory_cards.length, 0);
-    const avgConfidence =
-      sessions.reduce((acc, s) => acc + s.analysis.confidence.score, 0) / total;
-    return { total, ok, totalCards, avgConfidence };
-  }, []);
+    const finished = sessions.filter(
+      (s) => s.status === "finished" || s.status === "success"
+    ).length;
+    const totalCards = sessions.reduce((acc, s) => acc + (s.memoryCardCount || 0), 0);
+    const totalActions = sessions.reduce((acc, s) => acc + (s.actionCount || 0), 0);
+    return { total, finished, totalCards, totalActions };
+  }, [sessions]);
 
   return (
     <div className="px-4 py-8 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <header className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <Badge tone="electric" className="mb-3">
-              <Activity className="h-3 w-3" /> dashboard
-            </Badge>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <Badge tone="electric">
+                <Activity className="h-3 w-3" /> dashboard
+              </Badge>
+              <SourceTag source={source} loading={loading} onRefresh={refresh} />
+            </div>
             <h1 className="font-serif text-[36px] leading-tight text-white md:text-[44px]">
               Every agent session, captured.
             </h1>
             <p className="mt-2 max-w-xl text-[14px] text-white/60">
-              Browse, filter and replay every recorded run across your repos.
+              Sessions are read straight from{" "}
+              <span className="font-mono text-white/80">.witsmith/sessions/</span> via{" "}
+              <span className="font-mono text-white/80">/api/sessions</span>.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -88,26 +100,30 @@ export function SessionsPage() {
           </div>
         </header>
 
-        {/* Stats */}
+        {/* Stats — only real fields the backend exposes */}
         <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
           <StatCard
             icon={<Layers className="h-4 w-4" />}
             label="Sessions"
             value={<AnimatedNumber value={stats.total} />}
-            sub="Last 30 days"
-            spark={[2, 3, 4, 5, 6, 7, 6]}
+            sub="Recorded on disk"
+            spark={[stats.total]}
           />
           <StatCard
             icon={<CheckCircle2 className="h-4 w-4" />}
-            label="Resolved"
+            label="Finished"
             value={
               <>
-                <AnimatedNumber value={stats.ok} />
-                <span className="text-white/35"> / {stats.total}</span>
+                <AnimatedNumber value={stats.finished} />
+                <span className="text-white/35"> / {stats.total || "—"}</span>
               </>
             }
-            sub={`${Math.round((stats.ok / stats.total) * 100)}% success rate`}
-            spark={[3, 4, 4, 5, 5, 6, 7]}
+            sub={
+              stats.total > 0
+                ? `${Math.round((stats.finished / stats.total) * 100)}% finished`
+                : "—"
+            }
+            spark={[stats.finished]}
             color="var(--color-success)"
           />
           <StatCard
@@ -115,20 +131,15 @@ export function SessionsPage() {
             label="Memory cards"
             value={<AnimatedNumber value={stats.totalCards} />}
             sub="Generated by CLōD"
-            spark={[1, 2, 3, 5, 6, 8, 9]}
+            spark={[stats.totalCards]}
             color="var(--color-violet-glow)"
           />
           <StatCard
-            icon={<Coins className="h-4 w-4" />}
-            label="Avg confidence"
-            value={
-              <>
-                <AnimatedNumber value={Math.round(stats.avgConfidence * 100)} />
-                <span className="text-white/35">%</span>
-              </>
-            }
-            sub="Across all reports"
-            spark={[5, 4, 6, 7, 7, 8, 9]}
+            icon={<Hash className="h-4 w-4" />}
+            label="Actions"
+            value={<AnimatedNumber value={stats.totalActions} />}
+            sub="Across all sessions"
+            spark={[stats.totalActions]}
             color="var(--color-acid)"
           />
         </div>
@@ -140,7 +151,7 @@ export function SessionsPage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by task, branch, file…"
+              placeholder="Search by task, branch, id…"
               className="h-10 w-full rounded-full border border-white/10 bg-white/[0.03] pl-9 pr-3 text-[13.5px] text-white placeholder-white/35 outline-none focus:border-[color:var(--color-acid)]/40 focus:bg-white/[0.05]"
             />
           </div>
@@ -165,25 +176,41 @@ export function SessionsPage() {
               </button>
             ))}
           </div>
-          <button className="inline-flex h-10 items-center gap-2 rounded-full border border-white/10 px-3 text-[12.5px] text-white/65 hover:border-white/20 hover:text-white">
-            <Filter className="h-3.5 w-3.5" /> Repo
+          <button
+            onClick={refresh}
+            className="inline-flex h-10 items-center gap-2 rounded-full border border-white/10 px-3 text-[12.5px] text-white/65 hover:border-white/20 hover:text-white"
+          >
+            <Filter className="h-3.5 w-3.5" /> Refresh
           </button>
         </div>
 
-        {/* Sessions table/list */}
+        {/* Sessions table */}
         <div className="mt-6 overflow-hidden rounded-2xl border border-white/10 bg-[color:var(--color-surface)]/60">
-          <div className="hidden grid-cols-[2.5fr_1fr_1fr_1fr_0.8fr_0.7fr] gap-4 border-b border-white/5 bg-white/[0.02] px-5 py-3 text-[10.5px] font-medium uppercase tracking-[0.16em] text-white/45 lg:grid">
+          <div className="hidden grid-cols-[2.5fr_1fr_0.8fr_1fr_0.7fr] gap-4 border-b border-white/5 bg-white/[0.02] px-5 py-3 text-[10.5px] font-medium uppercase tracking-[0.16em] text-white/45 lg:grid">
             <div>Task</div>
             <div>Branch</div>
             <div>Files</div>
-            <div>Tests</div>
-            <div>Confidence</div>
+            <div>Actions · Memory</div>
             <div className="text-right">Started</div>
           </div>
 
-          {filtered.length === 0 && (
+          {error && (
+            <div className="px-5 py-12 text-center text-sm text-[color:var(--color-danger)]">
+              Backend error: {error}
+            </div>
+          )}
+
+          {!error && filtered.length === 0 && !loading && (
             <div className="px-5 py-16 text-center text-sm text-white/55">
-              No sessions match those filters.
+              {sessions.length === 0
+                ? "No sessions recorded yet. Run witsmith start + finish in a witsmith-instrumented repo."
+                : "No sessions match these filters."}
+            </div>
+          )}
+
+          {!error && loading && sessions.length === 0 && (
+            <div className="flex items-center justify-center px-5 py-16 text-sm text-white/55">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> loading…
             </div>
           )}
 
@@ -197,69 +224,62 @@ export function SessionsPage() {
                 className="border-b border-white/5 last:border-b-0"
               >
                 <Link
-                  to={`/sessions/${s.id}`}
+                  to={`/sessions/${encodeURIComponent(s.id)}`}
                   className="group block px-5 py-4 transition-colors hover:bg-white/[0.025]"
                 >
-                  <div className="grid grid-cols-1 items-center gap-4 lg:grid-cols-[2.5fr_1fr_1fr_1fr_0.8fr_0.7fr]">
+                  <div className="grid grid-cols-1 items-center gap-4 lg:grid-cols-[2.5fr_1fr_0.8fr_1fr_0.7fr]">
                     <div className="flex items-start gap-3">
                       <StatusGlyph status={s.status} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="truncate text-[14.5px] font-medium text-white group-hover:text-[color:var(--color-acid)]">
-                            {s.task}
+                            {s.task || "(no task)"}
                           </span>
                           <ArrowUpRight className="h-3.5 w-3.5 -translate-x-1 text-white/30 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
                         </div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11.5px] text-white/45">
                           <span className="font-mono">{s.id}</span>
-                          <span>·</span>
-                          <span>{s.repo}</span>
-                          <span>·</span>
-                          <span className="font-mono">{s.agent.model}</span>
+                          {s.baseCommit && (
+                            <>
+                              <span>·</span>
+                              <span className="font-mono">{s.baseCommit.slice(0, 7)}</span>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-1.5 text-[12.5px] text-white/65">
                       <GitBranch className="h-3.5 w-3.5 text-white/40" />
-                      <span className="truncate font-mono text-[12px]">{s.branch}</span>
+                      <span className="truncate font-mono text-[12px]">
+                        {s.branch || "—"}
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-3 text-[12.5px]">
-                      <span className="font-mono text-white/85">{s.changed_files.length}</span>
-                      <span className="font-mono text-[color:var(--color-success)]">
-                        +{s.changed_files.reduce((a, f) => a + f.added, 0)}
+                      <span className="font-mono text-white/85">
+                        {s.changedFiles?.length ?? 0}
                       </span>
-                      <span className="font-mono text-[color:var(--color-danger)]">
-                        −{s.changed_files.reduce((a, f) => a + f.removed, 0)}
-                      </span>
+                      <span className="text-white/45 text-[11px]">files</span>
                     </div>
 
-                    <div className="flex items-center gap-2 text-[12.5px]">
-                      {s.test_summary.failed > 0 ? (
-                        <Badge tone="danger">
-                          {s.test_summary.failed} failing
-                        </Badge>
-                      ) : s.test_summary.passed > 0 ? (
-                        <Badge tone="good">{s.test_summary.passed} pass</Badge>
-                      ) : (
-                        <Badge tone="muted">no tests</Badge>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <ConfidenceMeter score={s.analysis.confidence.score} size={36} thickness={4} showLabel={false} />
-                      <span className="font-mono text-[13px] text-white">
-                        {Math.round(s.analysis.confidence.score * 100)}
+                    <div className="flex items-center gap-3 text-[12.5px]">
+                      <span className="font-mono text-white/85">{s.actionCount}</span>
+                      <span className="text-white/40">·</span>
+                      <span className="font-mono text-[color:var(--color-violet-glow)]">
+                        {s.memoryCardCount}
                       </span>
+                      <span className="text-white/45 text-[11px]">cards</span>
                     </div>
 
                     <div className="flex flex-col items-start text-[12px] text-white/65 lg:items-end">
                       <span className="flex items-center gap-1.5">
                         <Clock className="h-3 w-3 text-white/40" />
-                        {formatDuration(s.duration_ms)}
+                        {durationFor(s)}
                       </span>
-                      <span className="text-[11px] text-white/40">{formatRelative(s.started_at)}</span>
+                      <span className="text-[11px] text-white/40">
+                        {formatRelative(s.startedAt)}
+                      </span>
                     </div>
                   </div>
                 </Link>
@@ -270,6 +290,12 @@ export function SessionsPage() {
       </div>
     </div>
   );
+}
+
+function durationFor(s: LiveSessionSummary): string {
+  if (!s.startedAt || !s.finishedAt) return "—";
+  const ms = new Date(s.finishedAt).getTime() - new Date(s.startedAt).getTime();
+  return formatDuration(ms);
 }
 
 function StatCard({
@@ -307,20 +333,21 @@ function StatCard({
       <div className="mt-2 font-serif text-[34px] leading-none text-white">{value}</div>
       <div className="mt-2 flex items-end justify-between">
         <span className="text-[11.5px] text-white/45">{sub}</span>
-        <Sparkline values={spark} width={70} height={24} color={color} />
+        <Sparkline values={spark.length > 0 ? spark : [0]} width={70} height={24} color={color} />
       </div>
     </motion.div>
   );
 }
 
-function StatusGlyph({ status }: { status: SessionStatus }) {
-  const map = {
+function StatusGlyph({ status }: { status: string }) {
+  const map: Record<string, { Icon: typeof CheckCircle2; color: string }> = {
+    finished: { Icon: CheckCircle2, color: "var(--color-success)" },
     success: { Icon: CheckCircle2, color: "var(--color-success)" },
     failed: { Icon: XCircle, color: "var(--color-danger)" },
     partial: { Icon: AlertTriangle, color: "var(--color-warn)" },
     running: { Icon: Loader2, color: "var(--color-electric)" },
-  } as const;
-  const { Icon, color } = map[status];
+  };
+  const { Icon, color } = map[status] ?? map.finished;
   return (
     <div
       className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border"
